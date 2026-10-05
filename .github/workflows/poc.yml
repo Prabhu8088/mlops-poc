@@ -1,0 +1,41 @@
+name: MLOPS Pipeline
+
+on:
+    push:
+        branches: [main]
+
+jobs:
+  build-and-push:
+    runs-on: self-hosted
+    permissions:
+      contents: write  # Required to push commits
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}  # Use built-in token
+    
+    - name: Build Docker image
+      run: |
+          docker build -t mlops-poc:${{ github.run_number }} .
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Tag Docker image
+      run: |
+        docker tag mlops-poc:${{ github.run_number }} \
+        ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:sample-${{ github.run_number }}
+
+    - name: Push Docker image
+      run: |
+        docker push \
+        ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:sample-${{ github.run_number }}
