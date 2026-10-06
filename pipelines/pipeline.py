@@ -5,42 +5,51 @@ from kfp.compiler import Compiler
 @dsl.component(
     base_image="python:3.12-slim",
     packages_to_install=[
+        "numpy",
         "pandas",
-        "scikit-learn",
-        "joblib",
     ],
 )
 def generate_data(
-    output_file: dsl.OutputPath(str),
+    output_file: dsl.Output[dsl.Dataset],
 ):
+    import numpy as np
     import pandas as pd
-    import random
 
-    random.seed(42)
+    np.random.seed(42)
 
-    data = []
+    NUM_RECORDS = 10000
 
-    for _ in range(1000):
-        amount = random.uniform(10, 10000)
-        age = random.randint(18, 80)
-        transaction_count = random.randint(1, 20)
+    data = pd.DataFrame({
+        "transaction_amount": np.random.exponential(200, NUM_RECORDS),
+        "transaction_hour": np.random.randint(0, 24, NUM_RECORDS),
+        "customer_age": np.random.randint(18, 80, NUM_RECORDS),
+        "account_age_days": np.random.randint(30, 3000, NUM_RECORDS),
+        "transactions_last_24h": np.random.poisson(3, NUM_RECORDS),
+        "foreign_transaction": np.random.randint(0, 2, NUM_RECORDS),
+        "distance_from_home": np.random.exponential(20, NUM_RECORDS),
+        "previous_fraud_count": np.random.poisson(0.2, NUM_RECORDS),
+    })
 
-        # Simple synthetic fraud rule
-        fraud = 1 if amount > 7000 and transaction_count > 10 else 0
+    fraud_score = (
+        (data["transaction_amount"] > 500) * 1.5
+        + (data["transaction_hour"].isin([0, 1, 2, 3, 4])) * 1.0
+        + (data["transactions_last_24h"] > 8) * 1.2
+        + (data["foreign_transaction"] == 1) * 1.0
+        + (data["distance_from_home"] > 50) * 1.3
+        + (data["previous_fraud_count"] > 0) * 1.5
+    )
 
-        data.append({
-            "amount": amount,
-            "age": age,
-            "transaction_count": transaction_count,
-            "fraud": fraud,
-        })
+    probability = 1 / (1 + np.exp(-(fraud_score - 2.5)))
 
-    df = pd.DataFrame(data)
+    data["fraud"] = np.random.binomial(1, probability)
 
-    df.to_csv(output_file, index=False)
+    data.to_csv(output_file.path, index=False)
 
-    print(f"Generated {len(df)} records")
-    print(f"Data saved to: {output_file}")
+    print(f"Generated {len(data)} records")
+    print(f"Saved dataset to: {output_file.path}")
+
+    print("\nClass distribution:")
+    print(data["fraud"].value_counts())
 
 
 @dsl.component(
@@ -51,14 +60,14 @@ def generate_data(
     ],
 )
 def preprocess_data(
-    input_file: dsl.InputPath(str),
-    train_file: dsl.OutputPath(str),
-    test_file: dsl.OutputPath(str),
+    input_file: dsl.Input[dsl.Dataset],
+    train_file: dsl.Output[dsl.Dataset],
+    test_file: dsl.Output[dsl.Dataset],
 ):
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv(input_file)
+    data = pd.read_csv(input_file.path)
 
     train_data, test_data = train_test_split(
         data,
@@ -67,8 +76,8 @@ def preprocess_data(
         stratify=data["fraud"],
     )
 
-    train_data.to_csv(train_file, index=False)
-    test_data.to_csv(test_file, index=False)
+    train_data.to_csv(train_file.path, index=False)
+    test_data.to_csv(test_file.path, index=False)
 
     print(f"Training records: {len(train_data)}")
     print(f"Testing records: {len(test_data)}")
@@ -83,14 +92,15 @@ def preprocess_data(
     ],
 )
 def train_model(
-    train_file: dsl.InputPath(str),
-    model_file: dsl.OutputPath(str),
+    train_file: dsl.Input[dsl.Dataset],
+    model_file: dsl.Output[dsl.Model],
 ):
     import pandas as pd
     import joblib
+
     from sklearn.ensemble import RandomForestClassifier
 
-    train_data = pd.read_csv(train_file)
+    train_data = pd.read_csv(train_file.path)
 
     X_train = train_data.drop("fraud", axis=1)
     y_train = train_data["fraud"]
@@ -104,10 +114,10 @@ def train_model(
 
     model.fit(X_train, y_train)
 
-    joblib.dump(model, model_file)
+    joblib.dump(model, model_file.path)
 
     print("Model training completed")
-    print(f"Model saved to: {model_file}")
+    print(f"Model saved to: {model_file.path}")
 
 
 @dsl.component(
@@ -119,8 +129,8 @@ def train_model(
     ],
 )
 def evaluate_model(
-    model_file: dsl.InputPath(str),
-    test_file: dsl.InputPath(str),
+    model_file: dsl.Input[dsl.Model],
+    test_file: dsl.Input[dsl.Dataset],
 ):
     import pandas as pd
     import joblib
@@ -132,9 +142,9 @@ def evaluate_model(
         f1_score,
     )
 
-    model = joblib.load(model_file)
+    model = joblib.load(model_file.path)
 
-    test_data = pd.read_csv(test_file)
+    test_data = pd.read_csv(test_file.path)
 
     X_test = test_data.drop("fraud", axis=1)
     y_test = test_data["fraud"]
