@@ -1,0 +1,260 @@
+# PIPELINE DEFINITION
+# Name: fraud-detection-pipeline
+# Description: Fraud detection MLOps pipeline
+components:
+  comp-evaluate-model:
+    executorLabel: exec-evaluate-model
+    inputDefinitions:
+      parameters:
+        model_file:
+          parameterType: STRING
+        test_file:
+          parameterType: STRING
+  comp-generate-data:
+    executorLabel: exec-generate-data
+    outputDefinitions:
+      parameters:
+        output_file:
+          parameterType: STRING
+  comp-preprocess-data:
+    executorLabel: exec-preprocess-data
+    inputDefinitions:
+      parameters:
+        input_file:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        test_file:
+          parameterType: STRING
+        train_file:
+          parameterType: STRING
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      parameters:
+        train_file:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        model_file:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-evaluate-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_model(\n    model_file: dsl.InputPath(str),\n    test_file:\
+          \ dsl.InputPath(str),\n):\n    import pandas as pd\n    import joblib\n\n\
+          \    from sklearn.metrics import (\n        accuracy_score,\n        precision_score,\n\
+          \        recall_score,\n        f1_score,\n    )\n\n    model = joblib.load(model_file)\n\
+          \n    test_data = pd.read_csv(test_file)\n\n    X_test = test_data.drop(\"\
+          fraud\", axis=1)\n    y_test = test_data[\"fraud\"]\n\n    y_pred = model.predict(X_test)\n\
+          \n    accuracy = accuracy_score(y_test, y_pred)\n    precision = precision_score(y_test,\
+          \ y_pred)\n    recall = recall_score(y_test, y_pred)\n    f1 = f1_score(y_test,\
+          \ y_pred)\n\n    print(\"\\nModel Evaluation\")\n    print(\"----------------\"\
+          )\n    print(f\"Accuracy : {accuracy:.4f}\")\n    print(f\"Precision: {precision:.4f}\"\
+          )\n    print(f\"Recall   : {recall:.4f}\")\n    print(f\"F1 Score : {f1:.4f}\"\
+          )\n\n"
+        image: python:3.12-slim
+    exec-generate-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - generate_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef generate_data(\n    output_file: dsl.OutputPath(str),\n):\n \
+          \   import pandas as pd\n    import random\n\n    random.seed(42)\n\n  \
+          \  data = []\n\n    for _ in range(1000):\n        amount = random.uniform(10,\
+          \ 10000)\n        age = random.randint(18, 80)\n        transaction_count\
+          \ = random.randint(1, 20)\n\n        # Simple synthetic fraud rule\n   \
+          \     fraud = 1 if amount > 7000 and transaction_count > 10 else 0\n\n \
+          \       data.append({\n            \"amount\": amount,\n            \"age\"\
+          : age,\n            \"transaction_count\": transaction_count,\n        \
+          \    \"fraud\": fraud,\n        })\n\n    df = pd.DataFrame(data)\n\n  \
+          \  df.to_csv(output_file, index=False)\n\n    print(f\"Generated {len(df)}\
+          \ records\")\n    print(f\"Data saved to: {output_file}\")\n\n"
+        image: python:3.12-slim
+    exec-preprocess-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocess_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocess_data(\n    input_file: dsl.InputPath(str),\n    train_file:\
+          \ dsl.OutputPath(str),\n    test_file: dsl.OutputPath(str),\n):\n    import\
+          \ pandas as pd\n    from sklearn.model_selection import train_test_split\n\
+          \n    data = pd.read_csv(input_file)\n\n    train_data, test_data = train_test_split(\n\
+          \        data,\n        test_size=0.2,\n        random_state=42,\n     \
+          \   stratify=data[\"fraud\"],\n    )\n\n    train_data.to_csv(train_file,\
+          \ index=False)\n    test_data.to_csv(test_file, index=False)\n\n    print(f\"\
+          Training records: {len(train_data)}\")\n    print(f\"Testing records: {len(test_data)}\"\
+          )\n\n"
+        image: python:3.12-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    train_file: dsl.InputPath(str),\n    model_file:\
+          \ dsl.OutputPath(str),\n):\n    import pandas as pd\n    import joblib\n\
+          \    from sklearn.ensemble import RandomForestClassifier\n\n    train_data\
+          \ = pd.read_csv(train_file)\n\n    X_train = train_data.drop(\"fraud\",\
+          \ axis=1)\n    y_train = train_data[\"fraud\"]\n\n    model = RandomForestClassifier(\n\
+          \        n_estimators=100,\n        max_depth=10,\n        random_state=42,\n\
+          \        class_weight=\"balanced\",\n    )\n\n    model.fit(X_train, y_train)\n\
+          \n    joblib.dump(model, model_file)\n\n    print(\"Model training completed\"\
+          )\n    print(f\"Model saved to: {model_file}\")\n\n"
+        image: python:3.12-slim
+pipelineInfo:
+  description: Fraud detection MLOps pipeline
+  name: fraud-detection-pipeline
+root:
+  dag:
+    tasks:
+      evaluate-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-model
+        dependentTasks:
+        - preprocess-data
+        - train-model
+        inputs:
+          parameters:
+            model_file:
+              taskOutputParameter:
+                outputParameterKey: model_file
+                producerTask: train-model
+            test_file:
+              taskOutputParameter:
+                outputParameterKey: test_file
+                producerTask: preprocess-data
+        taskInfo:
+          name: evaluate-model
+      generate-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-generate-data
+        taskInfo:
+          name: generate-data
+      preprocess-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocess-data
+        dependentTasks:
+        - generate-data
+        inputs:
+          parameters:
+            input_file:
+              taskOutputParameter:
+                outputParameterKey: output_file
+                producerTask: generate-data
+        taskInfo:
+          name: preprocess-data
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - preprocess-data
+        inputs:
+          parameters:
+            train_file:
+              taskOutputParameter:
+                outputParameterKey: train_file
+                producerTask: preprocess-data
+        taskInfo:
+          name: train-model
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.17.0

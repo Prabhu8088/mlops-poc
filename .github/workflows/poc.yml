@@ -19,10 +19,6 @@ jobs:
     - name: Build Docker image
       run: |
           docker build -t mlops-poc:${{ github.run_number }} .
-
-    - name: Run ML pipeline
-      run: |
-          docker run --rm mlops-poc:${{ github.run_number }}
     
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
