@@ -89,22 +89,51 @@ def preprocess_data(
         "pandas",
         "scikit-learn",
         "joblib",
+        "mlflow",
     ],
 )
 def train_model(
     train_file: dsl.Input[dsl.Dataset],
+    test_file: dsl.Input[dsl.Dataset],
     model_file: dsl.Output[dsl.Model],
 ):
     import pandas as pd
     import joblib
+    import mlflow
 
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import (
+        accuracy_score,
+        precision_score,
+        recall_score,
+        f1_score,
+    )
 
+    # MLflow server running on EC2
+    mlflow.set_tracking_uri("http://172.31.15.216:5000")
+
+    # Create/select experiment
+    mlflow.set_experiment("fraud-detection")
+
+    # -----------------------------
+    # Load training data
+    # -----------------------------
     train_data = pd.read_csv(train_file.path)
 
     X_train = train_data.drop("fraud", axis=1)
     y_train = train_data["fraud"]
 
+    # -----------------------------
+    # Load test data
+    # -----------------------------
+    test_data = pd.read_csv(test_file.path)
+
+    X_test = test_data.drop("fraud", axis=1)
+    y_test = test_data["fraud"]
+
+    # -----------------------------
+    # Create model
+    # -----------------------------
     model = RandomForestClassifier(
         n_estimators=100,
         max_depth=10,
@@ -112,13 +141,68 @@ def train_model(
         class_weight="balanced",
     )
 
-    model.fit(X_train, y_train)
+    # -----------------------------
+    # Start MLflow run
+    # -----------------------------
+    with mlflow.start_run():
 
-    joblib.dump(model, model_file.path)
+        # Log model parameters
+        mlflow.log_param("algorithm", "random_forest")
+        mlflow.log_param("n_estimators", 100)
+        mlflow.log_param("max_depth", 10)
+        mlflow.log_param("random_state", 42)
+        mlflow.log_param("class_weight", "balanced")
 
-    print("Model training completed")
+        # Train model
+        model.fit(X_train, y_train)
+
+        # Make predictions
+        y_pred = model.predict(X_test)
+
+        # -----------------------------
+        # Calculate metrics
+        # -----------------------------
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+
+        # -----------------------------
+        # Log metrics to MLflow
+        # -----------------------------
+        mlflow.log_metric("accuracy", accuracy)
+        mlflow.log_metric("precision", precision)
+        mlflow.log_metric("recall", recall)
+        mlflow.log_metric("f1_score", f1)
+
+        # -----------------------------
+        # Save model
+        # -----------------------------
+        joblib.dump(model, model_file.path)
+
+        # -----------------------------
+        # Log model artifact
+        # -----------------------------
+        mlflow.log_artifact(
+            model_file.path,
+            artifact_path="model",
+        )
+
+        # -----------------------------
+        # Print MLflow information
+        # -----------------------------
+        run_id = mlflow.active_run().info.run_id
+
+        print("\nMLflow Run")
+        print("----------------")
+        print(f"Run ID    : {run_id}")
+        print(f"Accuracy  : {accuracy:.4f}")
+        print(f"Precision : {precision:.4f}")
+        print(f"Recall    : {recall:.4f}")
+        print(f"F1 Score  : {f1:.4f}")
+
+    print("\nModel training completed")
     print(f"Model saved to: {model_file.path}")
-
 
 @dsl.component(
     base_image="python:3.12-slim",
@@ -178,6 +262,7 @@ def fraud_detection_pipeline():
 
     train_task = train_model(
         train_file=preprocess_task.outputs["train_file"],
+        test_file=preprocess_task.outputs["test_file"],
     )
 
     evaluate_task = evaluate_model(
