@@ -182,8 +182,9 @@ def train_model(
                 mlflow.sklearn.log_model(
                     model,
                     artifact_path="mlflow-model",
+                    skops_trusted_types=["sklearn.tree._tree.Tree"],
                 )
-
+                
                 run_id = mlflow.active_run().info.run_id
 
                 results.append({

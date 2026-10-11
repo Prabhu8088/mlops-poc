@@ -252,9 +252,10 @@ deploymentSpec:
           \      ),\n                }\n\n                mlflow.log_metrics(metrics)\n\
           \n                # Log a native MLflow model for registry compatibility\n\
           \                mlflow.sklearn.log_model(\n                    model,\n\
-          \                    artifact_path=\"mlflow-model\",\n                )\n\
-          \n                run_id = mlflow.active_run().info.run_id\n\n         \
-          \       results.append({\n                    \"algorithm\": algorithm,\n\
+          \                    artifact_path=\"mlflow-model\",\n                 \
+          \   skops_trusted_types=[\"sklearn.tree._tree.Tree\"],\n               \
+          \ )\n\n                run_id = mlflow.active_run().info.run_id\n\n    \
+          \            results.append({\n                    \"algorithm\": algorithm,\n\
           \                    \"f1_score\": metrics[\"f1_score\"],\n            \
           \        \"run_id\": run_id,\n                    \"metrics\": metrics,\n\
           \                })\n\n                print(f\"\\nAlgorithm: {algorithm}\"\
