@@ -92,16 +92,20 @@ def preprocess_data(
         "mlflow",
     ],
 )
+
 def train_model(
     train_file: dsl.Input[dsl.Dataset],
     test_file: dsl.Input[dsl.Dataset],
     model_file: dsl.Output[dsl.Model],
 ):
-    import pandas as pd
+    import os
+    import tempfile
     import joblib
+    import pandas as pd
     import mlflow
 
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import (
         accuracy_score,
         precision_score,
@@ -111,98 +115,118 @@ def train_model(
 
     # MLflow server running on EC2
     mlflow.set_tracking_uri("http://172.31.15.216:5000")
-
-    # Create/select experiment
     mlflow.set_experiment("fraud-detection")
 
-    # -----------------------------
     # Load training data
-    # -----------------------------
     train_data = pd.read_csv(train_file.path)
-
     X_train = train_data.drop("fraud", axis=1)
     y_train = train_data["fraud"]
 
-    # -----------------------------
     # Load test data
-    # -----------------------------
     test_data = pd.read_csv(test_file.path)
-
     X_test = test_data.drop("fraud", axis=1)
     y_test = test_data["fraud"]
 
-    # -----------------------------
-    # Create model
-    # -----------------------------
-    model = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=10,
-        random_state=42,
-        class_weight="balanced",
-    )
+    # Algorithms to compare
+    models = {
+        "random_forest": RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42,
+            class_weight="balanced",
+        ),
+        "logistic_regression": LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced",
+            random_state=42,
+        ),
+    }
 
-    # -----------------------------
-    # Start MLflow run
-    # -----------------------------
-    with mlflow.start_run():
+    results = []
+    os.makedirs(os.path.dirname(model_file.path) or ".", exist_ok=True)
 
-        # Log model parameters
-        mlflow.log_param("algorithm", "random_forest")
-        mlflow.log_param("n_estimators", 100)
-        mlflow.log_param("max_depth", 10)
-        mlflow.log_param("random_state", 42)
-        mlflow.log_param("class_weight", "balanced")
+    # Train and log each algorithm as a separate MLflow run
+    with tempfile.TemporaryDirectory() as temp_dir:
+        for algorithm, model in models.items():
+            with mlflow.start_run(run_name=algorithm):
+                mlflow.log_param("algorithm", algorithm)
+                mlflow.log_param("class_weight", "balanced")
+                mlflow.log_param("random_state", 42)
 
-        # Train model
-        model.fit(X_train, y_train)
+                if algorithm == "random_forest":
+                    mlflow.log_param("n_estimators", 100)
+                    mlflow.log_param("max_depth", 10)
+                else:
+                    mlflow.log_param("max_iter", 1000)
 
-        # Make predictions
-        y_pred = model.predict(X_test)
+                # Train
+                model.fit(X_train, y_train)
 
-        # -----------------------------
-        # Calculate metrics
-        # -----------------------------
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred)
-        recall = recall_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred)
+                # Predict
+                y_pred = model.predict(X_test)
 
-        # -----------------------------
-        # Log metrics to MLflow
-        # -----------------------------
-        mlflow.log_metric("accuracy", accuracy)
-        mlflow.log_metric("precision", precision)
-        mlflow.log_metric("recall", recall)
-        mlflow.log_metric("f1_score", f1)
+                # Evaluate
+                metrics = {
+                    "accuracy": accuracy_score(y_test, y_pred),
+                    "precision": precision_score(
+                        y_test, y_pred, zero_division=0
+                    ),
+                    "recall": recall_score(
+                        y_test, y_pred, zero_division=0
+                    ),
+                    "f1_score": f1_score(
+                        y_test, y_pred, zero_division=0
+                    ),
+                }
 
-        # -----------------------------
-        # Save model
-        # -----------------------------
-        joblib.dump(model, model_file.path)
+                # Log metrics
+                mlflow.log_metrics(metrics)
 
-        # -----------------------------
-        # Log model artifact
-        # -----------------------------
-        mlflow.log_artifact(
-            model_file.path,
-            artifact_path="model",
-        )
+                # Save and log this algorithm's model artifact
+                temp_model_path = os.path.join(
+                    temp_dir, f"{algorithm}.joblib"
+                )
+                joblib.dump(model, temp_model_path)
+                mlflow.log_artifact(
+                    temp_model_path,
+                    artifact_path="model",
+                )
 
-        # -----------------------------
-        # Print MLflow information
-        # -----------------------------
-        run_id = mlflow.active_run().info.run_id
+                run_id = mlflow.active_run().info.run_id
 
-        print("\nMLflow Run")
-        print("----------------")
-        print(f"Run ID    : {run_id}")
-        print(f"Accuracy  : {accuracy:.4f}")
-        print(f"Precision : {precision:.4f}")
-        print(f"Recall    : {recall:.4f}")
-        print(f"F1 Score  : {f1:.4f}")
+                results.append({
+                    "algorithm": algorithm,
+                    "f1_score": metrics["f1_score"],
+                    "run_id": run_id,
+                    "metrics": metrics,
+                    "model_path": temp_model_path,
+                })
 
-    print("\nModel training completed")
-    print(f"Model saved to: {model_file.path}")
+                print(f"\nAlgorithm: {algorithm}")
+                print(f"MLflow Run ID: {run_id}")
+                for metric_name, value in metrics.items():
+                    print(f"{metric_name}: {value:.4f}")
+
+        # Select the model with the highest F1 score
+        best_result = max(results, key=lambda result: result["f1_score"])
+
+        # Preserve the existing Kubeflow model output
+        joblib.dump(models[best_result["algorithm"]], model_file.path)
+
+        print("\n========== Model Comparison ==========")
+        for result in results:
+            print(
+                f"{result['algorithm']}: "
+                f"F1={result['f1_score']:.4f}"
+            )
+
+        print(f"\nBest algorithm: {best_result['algorithm']}")
+        print(f"Best F1 score: {best_result['f1_score']:.4f}")
+        print(f"Best MLflow run ID: {best_result['run_id']}")
+
+    print("\nModel training and comparison completed")
+    print(f"Selected model saved to: {model_file.path}")
+
 
 @dsl.component(
     base_image="python:3.12-slim",

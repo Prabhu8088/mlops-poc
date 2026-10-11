@@ -215,49 +215,66 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef train_model(\n    train_file: dsl.Input[dsl.Dataset],\n    test_file:\
           \ dsl.Input[dsl.Dataset],\n    model_file: dsl.Output[dsl.Model],\n):\n\
-          \    import pandas as pd\n    import joblib\n    import mlflow\n\n    from\
-          \ sklearn.ensemble import RandomForestClassifier\n    from sklearn.metrics\
+          \    import os\n    import tempfile\n    import joblib\n    import pandas\
+          \ as pd\n    import mlflow\n\n    from sklearn.ensemble import RandomForestClassifier\n\
+          \    from sklearn.linear_model import LogisticRegression\n    from sklearn.metrics\
           \ import (\n        accuracy_score,\n        precision_score,\n        recall_score,\n\
           \        f1_score,\n    )\n\n    # MLflow server running on EC2\n    mlflow.set_tracking_uri(\"\
-          http://172.31.15.216:5000\")\n\n    # Create/select experiment\n    mlflow.set_experiment(\"\
-          fraud-detection\")\n\n    # -----------------------------\n    # Load training\
-          \ data\n    # -----------------------------\n    train_data = pd.read_csv(train_file.path)\n\
-          \n    X_train = train_data.drop(\"fraud\", axis=1)\n    y_train = train_data[\"\
-          fraud\"]\n\n    # -----------------------------\n    # Load test data\n\
-          \    # -----------------------------\n    test_data = pd.read_csv(test_file.path)\n\
-          \n    X_test = test_data.drop(\"fraud\", axis=1)\n    y_test = test_data[\"\
-          fraud\"]\n\n    # -----------------------------\n    # Create model\n  \
-          \  # -----------------------------\n    model = RandomForestClassifier(\n\
-          \        n_estimators=100,\n        max_depth=10,\n        random_state=42,\n\
-          \        class_weight=\"balanced\",\n    )\n\n    # -----------------------------\n\
-          \    # Start MLflow run\n    # -----------------------------\n    with mlflow.start_run():\n\
-          \n        # Log model parameters\n        mlflow.log_param(\"algorithm\"\
-          , \"random_forest\")\n        mlflow.log_param(\"n_estimators\", 100)\n\
-          \        mlflow.log_param(\"max_depth\", 10)\n        mlflow.log_param(\"\
-          random_state\", 42)\n        mlflow.log_param(\"class_weight\", \"balanced\"\
-          )\n\n        # Train model\n        model.fit(X_train, y_train)\n\n    \
-          \    # Make predictions\n        y_pred = model.predict(X_test)\n\n    \
-          \    # -----------------------------\n        # Calculate metrics\n    \
-          \    # -----------------------------\n        accuracy = accuracy_score(y_test,\
-          \ y_pred)\n        precision = precision_score(y_test, y_pred)\n       \
-          \ recall = recall_score(y_test, y_pred)\n        f1 = f1_score(y_test, y_pred)\n\
-          \n        # -----------------------------\n        # Log metrics to MLflow\n\
-          \        # -----------------------------\n        mlflow.log_metric(\"accuracy\"\
-          , accuracy)\n        mlflow.log_metric(\"precision\", precision)\n     \
-          \   mlflow.log_metric(\"recall\", recall)\n        mlflow.log_metric(\"\
-          f1_score\", f1)\n\n        # -----------------------------\n        # Save\
-          \ model\n        # -----------------------------\n        joblib.dump(model,\
-          \ model_file.path)\n\n        # -----------------------------\n        #\
-          \ Log model artifact\n        # -----------------------------\n        mlflow.log_artifact(\n\
-          \            model_file.path,\n            artifact_path=\"model\",\n  \
-          \      )\n\n        # -----------------------------\n        # Print MLflow\
-          \ information\n        # -----------------------------\n        run_id =\
-          \ mlflow.active_run().info.run_id\n\n        print(\"\\nMLflow Run\")\n\
-          \        print(\"----------------\")\n        print(f\"Run ID    : {run_id}\"\
-          )\n        print(f\"Accuracy  : {accuracy:.4f}\")\n        print(f\"Precision\
-          \ : {precision:.4f}\")\n        print(f\"Recall    : {recall:.4f}\")\n \
-          \       print(f\"F1 Score  : {f1:.4f}\")\n\n    print(\"\\nModel training\
-          \ completed\")\n    print(f\"Model saved to: {model_file.path}\")\n\n"
+          http://172.31.15.216:5000\")\n    mlflow.set_experiment(\"fraud-detection\"\
+          )\n\n    # Load training data\n    train_data = pd.read_csv(train_file.path)\n\
+          \    X_train = train_data.drop(\"fraud\", axis=1)\n    y_train = train_data[\"\
+          fraud\"]\n\n    # Load test data\n    test_data = pd.read_csv(test_file.path)\n\
+          \    X_test = test_data.drop(\"fraud\", axis=1)\n    y_test = test_data[\"\
+          fraud\"]\n\n    # Algorithms to compare\n    models = {\n        \"random_forest\"\
+          : RandomForestClassifier(\n            n_estimators=100,\n            max_depth=10,\n\
+          \            random_state=42,\n            class_weight=\"balanced\",\n\
+          \        ),\n        \"logistic_regression\": LogisticRegression(\n    \
+          \        max_iter=1000,\n            class_weight=\"balanced\",\n      \
+          \      random_state=42,\n        ),\n    }\n\n    results = []\n    os.makedirs(os.path.dirname(model_file.path)\
+          \ or \".\", exist_ok=True)\n\n    # Train and log each algorithm as a separate\
+          \ MLflow run\n    with tempfile.TemporaryDirectory() as temp_dir:\n    \
+          \    for algorithm, model in models.items():\n            with mlflow.start_run(run_name=algorithm):\n\
+          \                mlflow.log_param(\"algorithm\", algorithm)\n          \
+          \      mlflow.log_param(\"class_weight\", \"balanced\")\n              \
+          \  mlflow.log_param(\"random_state\", 42)\n\n                if algorithm\
+          \ == \"random_forest\":\n                    mlflow.log_param(\"n_estimators\"\
+          , 100)\n                    mlflow.log_param(\"max_depth\", 10)\n      \
+          \          else:\n                    mlflow.log_param(\"max_iter\", 1000)\n\
+          \n                # Train\n                model.fit(X_train, y_train)\n\
+          \n                # Predict\n                y_pred = model.predict(X_test)\n\
+          \n                # Evaluate\n                metrics = {\n            \
+          \        \"accuracy\": accuracy_score(y_test, y_pred),\n               \
+          \     \"precision\": precision_score(\n                        y_test, y_pred,\
+          \ zero_division=0\n                    ),\n                    \"recall\"\
+          : recall_score(\n                        y_test, y_pred, zero_division=0\n\
+          \                    ),\n                    \"f1_score\": f1_score(\n \
+          \                       y_test, y_pred, zero_division=0\n              \
+          \      ),\n                }\n\n                # Log metrics\n        \
+          \        mlflow.log_metrics(metrics)\n\n                # Save and log this\
+          \ algorithm's model artifact\n                temp_model_path = os.path.join(\n\
+          \                    temp_dir, f\"{algorithm}.joblib\"\n               \
+          \ )\n                joblib.dump(model, temp_model_path)\n             \
+          \   mlflow.log_artifact(\n                    temp_model_path,\n       \
+          \             artifact_path=\"model\",\n                )\n\n          \
+          \      run_id = mlflow.active_run().info.run_id\n\n                results.append({\n\
+          \                    \"algorithm\": algorithm,\n                    \"f1_score\"\
+          : metrics[\"f1_score\"],\n                    \"run_id\": run_id,\n    \
+          \                \"metrics\": metrics,\n                    \"model_path\"\
+          : temp_model_path,\n                })\n\n                print(f\"\\nAlgorithm:\
+          \ {algorithm}\")\n                print(f\"MLflow Run ID: {run_id}\")\n\
+          \                for metric_name, value in metrics.items():\n          \
+          \          print(f\"{metric_name}: {value:.4f}\")\n\n        # Select the\
+          \ model with the highest F1 score\n        best_result = max(results, key=lambda\
+          \ result: result[\"f1_score\"])\n\n        # Preserve the existing Kubeflow\
+          \ model output\n        joblib.dump(models[best_result[\"algorithm\"]],\
+          \ model_file.path)\n\n        print(\"\\n========== Model Comparison ==========\"\
+          )\n        for result in results:\n            print(\n                f\"\
+          {result['algorithm']}: \"\n                f\"F1={result['f1_score']:.4f}\"\
+          \n            )\n\n        print(f\"\\nBest algorithm: {best_result['algorithm']}\"\
+          )\n        print(f\"Best F1 score: {best_result['f1_score']:.4f}\")\n  \
+          \      print(f\"Best MLflow run ID: {best_result['run_id']}\")\n\n    print(\"\
+          \\nModel training and comparison completed\")\n    print(f\"Selected model\
+          \ saved to: {model_file.path}\")\n\n"
         image: python:3.12-slim
 pipelineInfo:
   description: Fraud detection MLOps pipeline
