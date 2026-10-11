@@ -1,7 +1,6 @@
 from kfp import dsl
 from kfp.compiler import Compiler
 
-
 @dsl.component(
     base_image="python:3.12-slim",
     packages_to_install=[
@@ -103,6 +102,7 @@ def train_model(
     import joblib
     import pandas as pd
     import mlflow
+    import mlflow.sklearn
 
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
@@ -145,6 +145,7 @@ def train_model(
     results = []
     os.makedirs(os.path.dirname(model_file.path) or ".", exist_ok=True)
 
+
     # Train and log each algorithm as a separate MLflow run
     with tempfile.TemporaryDirectory() as temp_dir:
         for algorithm, model in models.items():
@@ -159,13 +160,9 @@ def train_model(
                 else:
                     mlflow.log_param("max_iter", 1000)
 
-                # Train
                 model.fit(X_train, y_train)
-
-                # Predict
                 y_pred = model.predict(X_test)
 
-                # Evaluate
                 metrics = {
                     "accuracy": accuracy_score(y_test, y_pred),
                     "precision": precision_score(
@@ -179,17 +176,12 @@ def train_model(
                     ),
                 }
 
-                # Log metrics
                 mlflow.log_metrics(metrics)
 
-                # Save and log this algorithm's model artifact
-                temp_model_path = os.path.join(
-                    temp_dir, f"{algorithm}.joblib"
-                )
-                joblib.dump(model, temp_model_path)
-                mlflow.log_artifact(
-                    temp_model_path,
-                    artifact_path="model",
+                # Log a native MLflow model for registry compatibility
+                mlflow.sklearn.log_model(
+                    model,
+                    artifact_path="mlflow-model",
                 )
 
                 run_id = mlflow.active_run().info.run_id
@@ -199,7 +191,6 @@ def train_model(
                     "f1_score": metrics["f1_score"],
                     "run_id": run_id,
                     "metrics": metrics,
-                    "model_path": temp_model_path,
                 })
 
                 print(f"\nAlgorithm: {algorithm}")
@@ -207,10 +198,25 @@ def train_model(
                 for metric_name, value in metrics.items():
                     print(f"{metric_name}: {value:.4f}")
 
-        # Select the model with the highest F1 score
+        # Both algorithms have now completed. Select the winner.
         best_result = max(results, key=lambda result: result["f1_score"])
 
-        # Preserve the existing Kubeflow model output
+        # Register only the winning model
+        model_uri = f"runs:/{best_result['run_id']}/mlflow-model"
+        registered_model_name = "fraud-detection-model"
+
+        registered_model = mlflow.register_model(
+            model_uri=model_uri,
+            name=registered_model_name,
+        )
+
+        print("\n========== Model Registry ==========")
+        print(f"Registered model: {registered_model_name}")
+        print(f"Model version: {registered_model.version}")
+        print(f"Selected algorithm: {best_result['algorithm']}")
+        print(f"Selected run ID: {best_result['run_id']}")
+
+        # Preserve the existing Kubeflow output artifact
         joblib.dump(models[best_result["algorithm"]], model_file.path)
 
         print("\n========== Model Comparison ==========")
@@ -222,10 +228,7 @@ def train_model(
 
         print(f"\nBest algorithm: {best_result['algorithm']}")
         print(f"Best F1 score: {best_result['f1_score']:.4f}")
-        print(f"Best MLflow run ID: {best_result['run_id']}")
-
-    print("\nModel training and comparison completed")
-    print(f"Selected model saved to: {model_file.path}")
+        print(f"Selected model saved to: {model_file.path}")
 
 
 @dsl.component(
