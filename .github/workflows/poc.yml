@@ -15,10 +15,12 @@ jobs:
       uses: actions/checkout@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}  # Use built-in token
-    
+
+    # MLOps pipeline image
     - name: Build Docker image
       run: |
-          docker build -t mlops-poc:${{ github.run_number }} .
+          docker build \
+            -t mlops-poc:${{ github.run_number }} .
     
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -39,3 +41,19 @@ jobs:
       run: |
         docker push \
         ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:sample-${{ github.run_number }}
+    
+    - name: Build Flask image
+        run: |
+          docker build \
+            -t mlops-fraud-flask:${{ github.run_number }} \
+            ./app
+
+    - name: Tag Flask image
+        run: |
+          docker tag mlops-fraud-flask:${{ github.run_number }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}
+    
+     - name: Push Flask image
+        run: |
+          docker push \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}

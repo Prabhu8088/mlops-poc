@@ -4,3 +4,6 @@ scikit-learn
 joblib
 mlflow
 kfp
+Flask
+requests
+gunicorn

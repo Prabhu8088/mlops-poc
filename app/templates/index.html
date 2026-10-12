@@ -1,0 +1,101 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fraud Detection Playground</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 850px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f4f6f9;
+      color: #1f2937;
+    }
+    .card {
+      background: white;
+      padding: 28px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px #00000012;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    label { display: block; font-size: 14px; margin-bottom: 6px; }
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 11px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+    }
+    button {
+      margin-top: 22px;
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .result, .error {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+    }
+    .result { background: #dcfce7; }
+    .error { background: #fee2e2; }
+    .hint { color: #64748b; font-size: 13px; }
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Fraud Detection Playground</h1>
+    <p>Enter transaction features and request a prediction from KServe.</p>
+
+    <form method="post">
+      <div class="grid">
+        {% for feature in features %}
+        <div>
+          <label for="{{ feature }}">{{ feature }}</label>
+          <input
+            id="{{ feature }}"
+            name="{{ feature }}"
+            type="number"
+            step="any"
+            value="{{ values[feature] }}"
+            required
+          >
+        </div>
+        {% endfor %}
+      </div>
+
+      <p class="hint">foreign_transaction: 0 = No, 1 = Yes.</p>
+      <button type="submit">Run Prediction</button>
+    </form>
+
+    {% if prediction is not none %}
+    <div class="result">
+      <h2>Model response</h2>
+      <p><strong>Prediction:</strong> {{ prediction }}</p>
+      <p class="hint">This is the model's raw output, not a calibrated fraud probability.</p>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="error">
+      <strong>Inference failed:</strong> {{ error }}
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
