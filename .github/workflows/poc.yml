@@ -53,7 +53,7 @@ jobs:
         docker tag mlops-fraud-flask:${{ github.run_number }} \
           ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }}
     
-     - name: Push Flask image
+    - name: Push Flask image
       run: |
         docker push \
           ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }}
