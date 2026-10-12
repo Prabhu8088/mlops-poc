@@ -43,17 +43,17 @@ jobs:
         ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:sample-${{ github.run_number }}
     
     - name: Build Flask image
-        run: |
-          docker build \
-            -t mlops-fraud-flask:${{ github.run_number }} \
-            ./app
+      run: |
+        docker build \
+          -t mlops-fraud-flask:${{ github.run_number }} \
+          ./app
 
     - name: Tag Flask image
-        run: |
-          docker tag mlops-fraud-flask:${{ github.run_number }} \
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}
+      run: |
+        docker tag mlops-fraud-flask:${{ github.run_number }} \
+          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}
     
      - name: Push Flask image
-        run: |
-          docker push \
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}
+      run: |
+        docker push \
+          ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask:${{ github.run_number }}
