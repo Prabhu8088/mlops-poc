@@ -31,6 +31,16 @@ jobs:
 
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Create ECR pull secret
+      run: |
+        kubectl create secret docker-registry ecr-secret \
+        --namespace churn-model \
+        --docker-server=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com \
+        --docker-username=AWS \
+        --docker-password="$(aws ecr get-login-password --region us-east-1)" \
+        --dry-run=client \
+        -o yaml | kubectl apply -f -
 
     - name: Tag Docker image
       run: |
@@ -57,3 +67,13 @@ jobs:
       run: |
         docker push \
           ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }}
+
+    - name : Deploy Flask
+      run: |
+        kubectl create -f app/flask-deployment.yml
+    
+    # - name: Deploy Flask App
+    #   run : |
+    #     kubectl set image update deployment/fraud-flask \
+    #       fraud-flask=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }} \
+    #       -n churn-model

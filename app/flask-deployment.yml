@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-flask
+  namespace: churn-model
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fraud-flask
+  template:
+    metadata:
+      labels:
+        app: fraud-flask
+    spec:
+      imagePullSecrets:
+        - name: ecr-secret
+      containers:
+        - name: fraud-flask
+          image: 146406208958.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-13
+          ports:
+            - containerPort: 5000
+          env:
+            - name: KSERVE_URL
+              value: "http://fraud-predictor-predictor.churn-model.svc.cluster.local/v2/models/fraud-predictor/infer"
