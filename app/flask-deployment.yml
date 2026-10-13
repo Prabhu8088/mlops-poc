@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fraud-flask
+  name: fraud-flask-ui
   namespace: churn-model
 spec:
   replicas: 1
