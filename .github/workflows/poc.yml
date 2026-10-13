@@ -67,9 +67,9 @@ jobs:
       run: |
         docker push \
           ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }}
-          
+
     - name: Deploy Flask App
       run : |
         kubectl set image update deployment/fraud-flask \
-          fraud-flask=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }} \
+          fraud-flask-ui=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }} \
           -n churn-model
