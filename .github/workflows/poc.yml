@@ -70,6 +70,6 @@ jobs:
 
     - name: Deploy Flask App
       run : |
-        kubectl set image update deployment/fraud-flask \
+        kubectl set image deployment/fraud-flask \
           fraud-flask-ui=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-${{ github.run_number }} \
           -n churn-model
