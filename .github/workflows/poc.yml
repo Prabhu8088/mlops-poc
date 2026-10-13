@@ -32,6 +32,12 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
     
+    - name: Check Kubernetes access
+      run: |
+        kubectl config current-context
+        kubectl get nodes
+        kubectl get namespace churn-model
+    
     - name: Create ECR pull secret
       run: |
         kubectl create secret docker-registry ecr-secret \
