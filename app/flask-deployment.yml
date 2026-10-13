@@ -7,16 +7,16 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fraud-flask
+      app: fraud-flask-ui
   template:
     metadata:
       labels:
-        app: fraud-flask
+        app: fraud-flask-ui
     spec:
       imagePullSecrets:
         - name: ecr-secret
       containers:
-        - name: fraud-flask
+        - name: fraud-flask-ui
           image: 146406208958.dkr.ecr.us-east-1.amazonaws.com/mlops-poc:flask-13
           ports:
             - containerPort: 5000
